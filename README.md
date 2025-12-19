@@ -1,60 +1,57 @@
-# Automated Infrastructure, Identity, and Compliance Strategy
+# Iron-Sandbox: The SDDC "Warpath" Strategy
 
 ## 1. Executive Summary
 
-**Current State:** Our environment has historically been managed via manual, "band-aid" fixes. Changes are reactive, and testing is performed on live production systems due to the lack of a high-fidelity lab. This "luck-based" engineering poses significant risk to mission readiness.
+**Objective:** To transition from reactive "Click-Ops" administration to a proactive **Software Defined Datacenter (SDDC)**.
 
-**Future State:** We are implementing a Software Defined Datacenter (SDDC) strategy. This project automates the creation of two distinct environments:
+This project implements a dual-pipeline strategy to automate the creation of Active Directory environments. It empowers the team to test destructive changes safely and migrate to a secure, STIG-compliant future state without risking mission-critical production systems.
 
-- **The Mirror:** A safe, air-gapped replica of Production for destructive testing.
-- **The Fortress:** A "Gold Standard" environment pre-hardened to DISA STIGs for future migration.
+### The Two Pipelines
 
----
-
-## 2. The Toolchain Strategy
-
-> We are moving from "Click-Ops" to "DevSecOps."
-
-| Tool | Role | The "Why" |
-|------|------|-----------|
-| **Packer** | The Mold | Guarantees every server starts identical. No more "configuration drift." |
-| **Terraform** | The Builder | Builds the network and VMs. Allows us to destroy/rebuild labs in minutes, not days. |
-| **Vault** | The Vault | Security. Stores passwords/keys safely. Replaces dangerous hardcoded credentials in scripts. |
-| **DSC / M365DSC** | The Brain | Defines the Identity. It "hydrates" the VMs with our Users, OUs, and GPOs automatically. |
-| **Ansible** | The Hands | Manages software and updates. Replaces manual RDP sessions and inconsistent patching. |
-| **Vagrant** | The Sim | Allows staff to simulate the network on a laptop for safe training before touching the main cluster. |
+| Feature | **Fork 1: The Mirror** (Ops Assurance) | **Fork 2: The Fortress** (Compliance) |
+| :--- | :--- | :--- |
+| **Goal** | Exact replica of Production for testing patches/scripts. | "Greenfield" build for STIG/Migration planning. |
+| **Data Source** | **Reverse Extraction** (Metadata only). No disk cloning. | **Infrastructure as Code** (STIG Baselines). |
+| **Security** | Sanitized. No Prod passwords leave the network. | Hardened from boot. 100% Compliance. |
 
 ---
 
-## 3. The Dual-Pipeline Architecture
+## 2. Public Repo Strategy: "The Hollow Shell"
 
-### Pipeline A: "The Mirror" (Operational Assurance)
+This repository utilizes a **Hollow Shell Architecture** to ensure security while maintaining open-source compatibility.
 
-**Objective:** Test patches and scripts against real data without risking the real network.
+* **The Code (Public):** The Terraform logic in this repo is generic. It contains **no** hardcoded IP addresses, domain names, or credentials. It serves as the "Engine."
+* **The Config (Private):** All environment-specific data (IP schemes, Naming conventions) is stored in a private **HashiCorp Vault** instance on-premises.
+* **The Execution:** At runtime, Terraform connects to Vault to "fill in the blanks," injecting the private data into the public logic.
 
-**Method (Metadata Extraction):**
-
-- We do **not** clone heavy, risky hard drives.
-- We use *Reverse Engineering* scripts to extract the structure of our domain (Users, Groups, OUs) into code.
-- We inject this code into a clean lab, effectively cloning the "Soul" of the domain without the "Body."
-
-### Pipeline B: "The Fortress" (Compliance Baseline)
-
-**Objective:** Create the perfect future state.
-
-**Method (STIG-as-Code):**
-
-- We define DISA STIG standards (Password Complexity, Banners, Auditing) as code.
-- We build a fresh domain that enforces these rules from the very first second of boot time.
+**Benefit:** We can showcase our automation logic publicly on GitHub without exposing internal network topology.
 
 ---
 
-## 4. Implementation Plan
+## 3. The Integrated Toolchain
 
-| Phase | Focus | Description |
-|-------|-------|-------------|
-| **Phase 1** | Foundation | Establish the "Golden Image" pipeline and Vagrant training simulator. |
-| **Phase 2** | Infrastructure | Deploy Terraform to handle networking and VM provisioning. |
-| **Phase 3** | Security | Integrate Vault to secure all automation credentials. |
-| **Phase 4** | Identity | Implement the "Reverse DSC" logic to clone production data safely. |
-| **Phase 5** | Operations | Deploy Ansible for automated software management and patching. |
+We utilize an "Integrate, Not Replace" philosophy. We wrap modern automation around our existing VMware & Windows ecosystem.
+
+* **Packer (The Mold):** Builds a single "Golden Image" (Server 2022) compatible with both **Nutanix/ESXi** (Prod) and **VMware Workstation** (Laptops).
+* **Terraform (The Builder):** Defines the network isolation and VM hardware specs. It asks **Vault** for configuration data.
+* **Vault (The Security):** Central storage for Secrets (Passwords) AND Configuration (IPs, Hostnames).
+* **DSC + M365DSC (The Brain):** "Hydrates" the OS. It reads the extracted production data and rebuilds Users, Groups, and OUs automatically.
+* **Ansible (The Hands):** Manages "Day 2" operations (Software installation, Patching, IIS Config) via agentless SSH/WinRM.
+* **Vagrant (The Simulator):** Allows staff to spin up a mini-version of the domain on their **VMware Workstation** laptops for safe training.
+
+---
+
+## 4. Architecture Diagram
+
+```text
+[Public GitHub Repo]     [Private On-Prem Vault]      [Production/Lab Cluster]
+       |                         |                               |
+   (Generic Code) + (Config Data & Secrets) --> (Terraform Engine)
+       |                                                 |
+[Operator Laptop]                                [Nutanix / ESXi]
+       |                                                 |
+   (Vagrant) <-------------------------------------> (Real Lab)
+                                                         |
+                           +------------------- (Ansible) -------------+
+                                     Config Management & Patching
+```
