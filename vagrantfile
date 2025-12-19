@@ -1,0 +1,29 @@
+# Vagrantfile for Iron-Sandbox (VMware Workstation Pro Edition)
+Vagrant.configure("2") do |config|
+  
+  # 1. Use the "Golden Image" built by Packer
+  config.vm.box = "iron-server-2022"
+
+  # 2. Define the "Mirror" Domain Controller
+  config.vm.define "lab-dc-01" do |dc|
+    dc.vm.hostname = "LAB-DC-01"
+    dc.vm.network "private_network", ip: "192.168.50.10" # Air-gapped subnet
+    
+    # VMware Workstation Specific Tuning
+    dc.vm.provider "vmware_desktop" do |v|
+      v.gui = true                  # Pop up the window so they can see the console
+      v.vmx["memsize"] = "4096"     # 4GB RAM for Laptop efficiency
+      v.vmx["numvcpus"] = "2"       # 2 vCPUs
+      v.whitelist_verified = true   # Trust the VMX settings
+    end
+
+    # 3. The Handoff: Trigger Ansible immediately after boot
+    dc.vm.provision "ansible" do |ansible|
+      ansible.playbook = "ansible/site.yml"
+      ansible.extra_vars = {
+        ansible_user: "vagrant", 
+        ansible_password: "vagrant"
+      }
+    end
+  end
+end
