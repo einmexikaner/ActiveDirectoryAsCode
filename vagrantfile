@@ -1,29 +1,69 @@
-# Vagrantfile for Iron-Sandbox (VMware Workstation Pro Edition)
+# Vagrantfile for Active Directory Lab - VMware Workstation (Isolated Environment)
 Vagrant.configure("2") do |config|
+
+  # ============================================================================
+  # GLOBAL SETTINGS
+  # ============================================================================
   
-  # 1. Use the "Golden Image" built by Packer
-  config.vm.box = "iron-server-2022"
+  # Prebuilt Windows Server 2019 DC from Vagrant Cloud
+  config.vm.box = "dstoliker/winserver2019-dc"
+  config.vm.box_version = "1.1.20250225155428"
 
-  # 2. Define the "Mirror" Domain Controller
-  config.vm.define "lab-dc-01" do |dc|
+  # WinRM for host-to-guest command execution (required for Windows guests)
+  config.vm.communicator = "winrm"
+  config.winrm.username = "vagrant"
+  config.winrm.password = "vagrant"
+  config.winrm.timeout = 300
+  config.winrm.retry_limit = 20
+
+  # Synced folder for dropping files from host to guest
+  # Host folder: ./shared -> Guest folder: C:\vagrant_shared
+  # Map share in workstation for this to work, will be enabled but nothing mapped
+  config.vm.synced_folder "./shared", "/vagrant_shared", 
+    create: true,
+    type: "smb",
+    smb_username: ENV['USERNAME'],
+    smb_password: ENV['SMB_PASSWORD']
+
+  # ============================================================================
+  # DOMAIN CONTROLLER
+  # ============================================================================
+  config.vm.define "lab-dc-01", primary: true do |dc|
     dc.vm.hostname = "LAB-DC-01"
-    dc.vm.network "private_network", ip: "192.168.50.10" # Air-gapped subnet
-    
-    # VMware Workstation Specific Tuning
+
+    # LAB NETWORK: 172.30.99.x (clearly distinct from typical home/work networks)
+    # Host will be reachable at 172.30.99.1, VM at 172.30.99.10
+    dc.vm.network "private_network", ip: "172.30.99.10"
+
+    # -------------------------------------------------------------------------
+    # VMWARE WORKSTATION PROVIDER
+    # -------------------------------------------------------------------------
     dc.vm.provider "vmware_desktop" do |v|
-      v.gui = true                  # Pop up the window so they can see the console
-      v.vmx["memsize"] = "4096"     # 4GB RAM for Laptop efficiency
-      v.vmx["numvcpus"] = "2"       # 2 vCPUs
-      v.whitelist_verified = true   # Trust the VMX settings
+      v.gui = true                                      # Show console window
+      v.vmx["displayName"] = "AD-Lab-DC-01"             # VM name in VMware
+      v.vmx["memsize"] = "8192"                         # 8GB RAM
+      v.vmx["numvcpus"] = "8"                           # 8 vCPUs
+      v.vmx["ethernet1.connectiontype"] = "hostonly"   # Isolated from internet
+      v.whitelist_verified = true
     end
 
-    # 3. The Handoff: Trigger Ansible immediately after boot
-    dc.vm.provision "ansible" do |ansible|
-      ansible.playbook = "ansible/site.yml"
-      ansible.extra_vars = {
-        ansible_user: "vagrant", 
-        ansible_password: "vagrant"
-      }
-    end
+    # -------------------------------------------------------------------------
+    # PROVISIONING (optional - uncomment to use Ansible)
+    # -------------------------------------------------------------------------
+    # dc.vm.provision "ansible" do |ansible|
+    #   ansible.playbook = "ansible/site.yml"
+    #   ansible.extra_vars = {
+    #     ansible_user: "vagrant",
+    #     ansible_password: "vagrant",
+    #     ansible_connection: "winrm",
+    #     ansible_winrm_transport: "ntlm"
+    #   }
+    # end
+
+    dc.vm.provision "shell", inline: <<-SHELL
+      Write-Host "=== AD Lab Domain Controller Ready ==="
+      Write-Host "Network: 172.30.99.x (LAB)"
+      Write-Host "Access via WinRM from host"
+    SHELL
   end
 end
