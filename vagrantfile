@@ -1,3 +1,6 @@
+# If not done already, install the Vagrant VMware Utility, then run vagrant plugin install vagrant-vmware-desktop to install the 
+# plugin otherwise error will be given about no providers found
+
 # Vagrantfile for Active Directory Lab - VMware Workstation (Isolated Environment)
 Vagrant.configure("2") do |config|
 
